@@ -110,6 +110,9 @@ func (svc *service) reset() {
 	svc.procStatStartTime = -1
 }
 
+// Verifies that a process is still running.  The returned procStatData is only
+// valid if stillRunning is true.  Calls reset() if the process is not running
+// anymore.
 func (svc *service) verifyStillRunning() (procStatData []string, stillRunning bool) {
 	procStatData, err := svc.readProcStatData()
 	if err != nil {
@@ -150,6 +153,10 @@ func (svc *service) askServiceForPID() (pid int, err error) {
 	return pid, nil
 }
 
+// Tries to figure out the Linux process ID (PID) for the service.  The only
+// error currently returned by this function is errServiceNotRunning; any error
+// while attempting to figure out the PID will be fatal.  The returned
+// procStatData is only valid if err is nil.
 func (svc *service) findPID() (procStatData []string, err error) {
 	svc.pid, err = svc.askServiceForPID()
 	if err == errServiceNotRunning {
