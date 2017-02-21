@@ -27,7 +27,7 @@ var elog *log.Logger
 
 // serviceMetrics
 const (
-	SM_PROCESS_START_JIFFIES int = iota
+	SM_PROCESS_START int = iota
 )
 
 type service struct {
@@ -63,9 +63,9 @@ func newSvcCollector(serviceNames []string) *SvcCollector {
 	}
 
 	c.serviceMetrics = map[int]*prometheus.Desc{
-		SM_PROCESS_START_JIFFIES: prometheus.NewDesc(
-			"service_process_start_jiffies",
-			"The time at which the current process was started, in jiffies; -1 if currently not running.",
+		SM_PROCESS_START: prometheus.NewDesc(
+			"service_process_start",
+			"The time at which the current process was started; -1 if currently not running.",
 			[]string{"service"},
 			nil,
 		),
@@ -202,7 +202,7 @@ func (c *SvcCollector) Collect(ch chan<- prometheus.Metric) {
 	for _, svc := range c.services {
 		_ = c.scrape(svc)
 		ch <- prometheus.MustNewConstMetric(
-			c.serviceMetrics[SM_PROCESS_START_JIFFIES],
+			c.serviceMetrics[SM_PROCESS_START],
 			prometheus.GaugeValue,
 			float64(svc.procStatStartTime),
 			svc.name,
