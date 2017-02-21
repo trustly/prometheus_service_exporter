@@ -111,8 +111,20 @@ func (svc *service) reset() {
 }
 
 func (svc *service) verifyStillRunning() (procStatData []string, stillRunning bool) {
-	svc.reset()
-	return nil, false
+	procStatData, err := svc.readProcStatData()
+	if err != nil {
+		svc.reset()
+		return nil, false
+	}
+	currentProcStartTime, err := strconv.ParseInt(procStatData[21], 10, 64)
+	if err != nil {
+		log.Fatalf("garbage start_time for pid %d", svc.pid)
+	}
+	if currentProcStartTime != svc.procStatStartTime {
+		svc.reset()
+		return nil, false
+	}
+	return procStatData, true
 }
 
 func (svc *service) askServiceForPID() (pid int, err error) {
@@ -177,7 +189,7 @@ func (svc *service) findPID() (procStatData []string, err error) {
 
 	svc.procStatStartTime, err = strconv.ParseInt(procStatData[21], 10, 64)
 	if err != nil {
-		log.Fatalf("garbage start_time for pid %d", procStatData[21], svc.pid)
+		log.Fatalf("garbage start_time for pid %d", svc.pid)
 	}
 	return procStatData, nil
 }
