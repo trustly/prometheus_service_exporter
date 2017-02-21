@@ -153,7 +153,15 @@ func (svc *service) findPID() (procStatData []string, err error) {
 		return nil, errServiceNotRunning
 	}
 
-	// check for race
+	// Now that we have read the stat data, ask for the service's PID again to
+	// guard against the possibility that the service died and another process
+	// took its place with the same PID.  If the PID still matches we can quite
+	// safely assume that we just read the data for the correct process.
+	//
+	// (There's still a window where we read the stat file for an unrelated
+	// process, which then died before the service was restarted -- but that
+	// will be detected on the next scrape, since the start time will have
+	// changed from what we read on this scrape.)
 
 	recheckPid, err := svc.askServiceForPID()
 	if err == errServiceNotRunning {
