@@ -134,7 +134,13 @@ func (svc *service) askServiceForPID() (pid int, err error) {
 	cmd := exec.Command("service", svc.name, "status")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Fatalf("could not query for the status of service %s: %s", svc.name, err)
+		errStr := err.Error()
+		if output != nil {
+			log.Printf("command 'service %s status' failed: %s", svc.name, err)
+			errStr = (strings.SplitN(string(output), "\n", 2))[0]
+		}
+		log.Printf("could not query for the status of service %s: %s", svc.name, errStr)
+		os.Exit(1)
 	}
 	parts := strings.Split(string(output), " ")
 	if len(parts) < 4 {
