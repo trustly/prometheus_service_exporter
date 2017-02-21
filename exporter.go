@@ -168,6 +168,7 @@ func (svc *service) findPID() (procStatData []string, err error) {
 
 	procStatData, err = svc.readProcStatData()
 	if err != nil {
+		log.Printf("service %s (pid %d) has died", svc.name, svc.pid)
 		svc.reset()
 		return nil, errServiceNotRunning
 	}
@@ -184,12 +185,14 @@ func (svc *service) findPID() (procStatData []string, err error) {
 
 	recheckPid, err := svc.askServiceForPID()
 	if err == errServiceNotRunning {
+		log.Printf("service %s (pid %d) has died", svc.name, svc.pid)
 		svc.reset()
 		return nil, errServiceNotRunning
 	} else if err != nil {
 		panic(err)
 	}
 	if recheckPid != svc.pid {
+		log.Printf("service %s (pid %d) has died", svc.name, svc.pid)
 		svc.reset()
 		return nil, errServiceNotRunning
 	}
@@ -205,8 +208,10 @@ func (c *SvcCollector) scrape(svc *service) error {
 	var procStatData []string
 	if svc.pid != -1 {
 		var stillRunning bool
+		oldPid := svc.pid
 		procStatData, stillRunning = svc.verifyStillRunning()
 		if !stillRunning {
+			log.Printf("service %s (pid %d) has died", svc.name, oldPid)
 			procStatData = nil
 		}
 	}
@@ -216,6 +221,7 @@ func (c *SvcCollector) scrape(svc *service) error {
 		if err != nil {
 			return err
 		}
+		log.Printf("service %s running, pid %d", svc.name, svc.pid)
 	}
 	_ = procStatData
 	return nil
