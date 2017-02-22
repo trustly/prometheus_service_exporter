@@ -30,6 +30,10 @@ const (
 	SM_PROCESS_START int = iota
 )
 
+const (
+	PROC_PID_STAT_STARTTIME int = 21
+)
+
 type service struct {
 	name string
 
@@ -119,7 +123,7 @@ func (svc *service) verifyStillRunning() (procStatData []string, stillRunning bo
 		svc.reset()
 		return nil, false
 	}
-	currentProcStartTime, err := strconv.ParseInt(procStatData[21], 10, 64)
+	currentProcStartTime, err := strconv.ParseInt(procStatData[PROC_PID_STAT_STARTTIME], 10, 64)
 	if err != nil {
 		log.Fatalf("garbage start_time for pid %d", svc.pid)
 	}
@@ -209,7 +213,7 @@ func (svc *service) findPID() (procStatData []string, err error) {
 		return nil, errServiceNotRunning
 	}
 
-	svc.procStatStartTime, err = strconv.ParseInt(procStatData[21], 10, 64)
+	svc.procStatStartTime, err = strconv.ParseInt(procStatData[PROC_PID_STAT_STARTTIME], 10, 64)
 	if err != nil {
 		log.Fatalf("garbage start_time for pid %d", svc.pid)
 	}
