@@ -28,17 +28,28 @@ var elog *log.Logger
 // serviceMetrics
 const (
 	SM_PROCESS_START int = iota
+	SM_PROCESS_CPU_SELF_TIME
+	SM_PROCESS_CPU_TIME
 )
 
 const (
 	PROC_PID_STAT_STARTTIME int = 21
+	PROC_PID_STAT_UTIME = 15
+	PROC_PID_STAT_STIME = 16
+	PROC_PID_STAT_CUTIME = 17
+	PROC_PID_STAT_CSTIME = 18
 )
 
 type service struct {
 	name string
 
+	// Constant as long as the service is up
 	pid int
 	procStatStartTime int64
+
+	// Re-populated on each scrape
+	procStatCPUSelfTime int64
+	procStatCPUTime int64
 }
 
 type SvcCollector struct {
@@ -70,6 +81,18 @@ func newSvcCollector(serviceNames []string) *SvcCollector {
 		SM_PROCESS_START: prometheus.NewDesc(
 			"service_process_start",
 			"The time at which the current process was started; -1 if currently not running.",
+			[]string{"service"},
+			nil,
+		),
+		SM_PROCESS_CPU_SELF_TIME: prometheus.NewDesc(
+			"service_cpu_self_time_total",
+			"The amount of CPU time used by this process, excluding children, measured in clock ticks.",
+			[]string{"service"},
+			nil,
+		),
+		SM_PROCESS_CPU_TIME: prometheus.NewDesc(
+			"service_cpu_time_total",
+			"The amount of CPU time used by this process and its waited-for children, measured in clock ticks.",
 			[]string{"service"},
 			nil,
 		),
@@ -112,6 +135,9 @@ func (svc *service) readProcStatData() (procStatData []string, err error) {
 func (svc *service) reset() {
 	svc.pid = -1
 	svc.procStatStartTime = -1
+
+	svc.procStatCPUSelfTime = 0
+	svc.procStatCPUTime = 0
 }
 
 // Verifies that a process is still running.  The returned procStatData is only
@@ -239,7 +265,15 @@ func (c *SvcCollector) scrape(svc *service) error {
 		}
 		log.Printf("service %s running, pid %d", svc.name, svc.pid)
 	}
-	_ = procStatData
+	readInt64 := func(idx int) int64 {
+		val, err := strconv.ParseInt(procStatData[idx], 10, 64)
+		if err != nil {
+			log.Fatalf("garbage data at column index %d for pid %d", idx + 1, svc.pid)
+		}
+		return val
+	}
+	svc.procStatCPUSelfTime = readInt64(PROC_PID_STAT_UTIME) + readInt64(PROC_PID_STAT_STIME)
+	svc.procStatCPUTime = svc.procStatCPUSelfTime + readInt64(PROC_PID_STAT_CUTIME) + readInt64(PROC_PID_STAT_CSTIME)
 	return nil
 }
 
@@ -254,6 +288,18 @@ func (c *SvcCollector) Collect(ch chan<- prometheus.Metric) {
 			c.serviceMetrics[SM_PROCESS_START],
 			prometheus.GaugeValue,
 			float64(svc.procStatStartTime),
+			svc.name,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			c.serviceMetrics[SM_PROCESS_CPU_SELF_TIME],
+			prometheus.CounterValue,
+			float64(svc.procStatCPUSelfTime),
+			svc.name,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			c.serviceMetrics[SM_PROCESS_CPU_TIME],
+			prometheus.CounterValue,
+			float64(svc.procStatCPUTime),
 			svc.name,
 		)
 	}
