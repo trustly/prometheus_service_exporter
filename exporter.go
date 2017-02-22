@@ -30,6 +30,8 @@ const (
 	SM_PROCESS_START int = iota
 	SM_PROCESS_CPU_SELF_TIME
 	SM_PROCESS_CPU_TIME
+	SM_PROCESS_VSIZE
+	SM_PROCESS_RSS
 )
 
 const (
@@ -38,6 +40,8 @@ const (
 	PROC_PID_STAT_STIME = 16
 	PROC_PID_STAT_CUTIME = 17
 	PROC_PID_STAT_CSTIME = 18
+	PROC_PID_STAT_VSIZE = 22
+	PROC_PID_STAT_RSS = 23
 )
 
 type service struct {
@@ -50,6 +54,8 @@ type service struct {
 	// Re-populated on each scrape
 	procStatCPUSelfTime int64
 	procStatCPUTime int64
+	procStatVSize int64
+	procStatRSS int64
 }
 
 type SvcCollector struct {
@@ -96,6 +102,18 @@ func newSvcCollector(serviceNames []string) *SvcCollector {
 			[]string{"service"},
 			nil,
 		),
+		SM_PROCESS_VSIZE: prometheus.NewDesc(
+			"service_current_vsize",
+			"The virtual memory size of the process, in bytes; 0 if currently not running.",
+			[]string{"service"},
+			nil,
+		),
+		SM_PROCESS_RSS: prometheus.NewDesc(
+			"service_current_rss",
+			"The Resident Set Size of the process; 0 if currently not running.",
+			[]string{"service"},
+			nil,
+		),
 	}
 
 	for _, svc := range serviceNames {
@@ -126,7 +144,7 @@ func (svc *service) readProcStatData() (procStatData []string, err error) {
 		elog.Fatalf("could not read process data for pid %d: %s", svc.pid, err)
 	}
 	procStatData = strings.Split(string(procStatRawData), " ")
-	if len(procStatData) < 20 {
+	if len(procStatData) < 25 {
 		elog.Fatalf("unexpected stat data for pid %d", svc.pid)
 	}
 	return procStatData, nil
@@ -138,6 +156,8 @@ func (svc *service) reset() {
 
 	svc.procStatCPUSelfTime = 0
 	svc.procStatCPUTime = 0
+	svc.procStatVSize = 0
+	svc.procStatRSS = 0
 }
 
 // Verifies that a process is still running.  The returned procStatData is only
@@ -274,6 +294,8 @@ func (c *SvcCollector) scrape(svc *service) error {
 	}
 	svc.procStatCPUSelfTime = readInt64(PROC_PID_STAT_UTIME) + readInt64(PROC_PID_STAT_STIME)
 	svc.procStatCPUTime = svc.procStatCPUSelfTime + readInt64(PROC_PID_STAT_CUTIME) + readInt64(PROC_PID_STAT_CSTIME)
+	svc.procStatVSize = readInt64(PROC_PID_STAT_VSIZE)
+	svc.procStatRSS = readInt64(PROC_PID_STAT_RSS)
 	return nil
 }
 
@@ -300,6 +322,18 @@ func (c *SvcCollector) Collect(ch chan<- prometheus.Metric) {
 			c.serviceMetrics[SM_PROCESS_CPU_TIME],
 			prometheus.CounterValue,
 			float64(svc.procStatCPUTime),
+			svc.name,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			c.serviceMetrics[SM_PROCESS_VSIZE],
+			prometheus.GaugeValue,
+			float64(svc.procStatVSize),
+			svc.name,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			c.serviceMetrics[SM_PROCESS_RSS],
+			prometheus.GaugeValue,
+			float64(svc.procStatRSS),
 			svc.name,
 		)
 	}
