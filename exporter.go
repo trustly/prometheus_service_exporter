@@ -23,6 +23,8 @@ var (
 	errServiceNotRunning = errors.New("service it not running")
 )
 
+var _SC_CLK_TCK int
+
 var elog *log.Logger
 
 // serviceMetrics
@@ -32,6 +34,7 @@ const (
 	SM_PROCESS_CPU_TIME
 	SM_PROCESS_VSIZE
 	SM_PROCESS_RSS
+	SM_PROCESS_UPTIME_SECONDS
 )
 
 const (
@@ -114,6 +117,12 @@ func newSvcCollector(serviceNames []string) *SvcCollector {
 			[]string{"service"},
 			nil,
 		),
+		SM_PROCESS_UPTIME_SECONDS: prometheus.NewDesc(
+			"service_process_uptime_seconds",
+			"The uptime of the process in seconds; -1 if currently not running.",
+			[]string{"service"},
+			nil,
+		),
 	}
 
 	for _, svc := range serviceNames {
@@ -133,6 +142,18 @@ func (c *SvcCollector) Describe(ch chan<- *prometheus.Desc) {
 	for _, d := range c.serviceMetrics {
 		ch <- d
 	}
+}
+
+func (c *SvcCollector) readProcUptimeData() []string {
+	procUptimeRawData, err := ioutil.ReadFile("/proc/uptime")
+	if err != nil {
+		elog.Fatalf("could not read /proc/uptime: %s", err)
+	}
+	procUptimeData := strings.Split(string(procUptimeRawData), " ")
+	if len(procUptimeData) < 2 {
+		elog.Fatalf("unexpected /proc/uptime data")
+	}
+	return procUptimeData
 }
 
 func (svc *service) readProcStatData() (procStatData []string, err error) {
@@ -306,6 +327,14 @@ func (c *SvcCollector) Collect(ch chan<- prometheus.Metric) {
 
 	for _, svc := range c.services {
 		_ = c.scrape(svc)
+	}
+	procUptimeData := c.readProcUptimeData()
+	systemUptimeInSeconds, err := strconv.ParseFloat(procUptimeData[0], 64)
+	if err != nil {
+		log.Fatalf("unexpected /proc/uptime data %s", procUptimeData[0])
+	}
+	systemUptimeInTicks := int64(systemUptimeInSeconds * float64(_SC_CLK_TCK))
+	for _, svc := range c.services {
 		ch <- prometheus.MustNewConstMetric(
 			c.serviceMetrics[SM_PROCESS_START],
 			prometheus.GaugeValue,
@@ -334,6 +363,18 @@ func (c *SvcCollector) Collect(ch chan<- prometheus.Metric) {
 			c.serviceMetrics[SM_PROCESS_RSS],
 			prometheus.GaugeValue,
 			float64(svc.procStatRSS),
+			svc.name,
+		)
+		var serviceUptimeSeconds float64
+		if svc.pid == -1 {
+			serviceUptimeSeconds = -1
+		} else {
+			serviceUptimeSeconds = float64(systemUptimeInTicks - svc.procStatStartTime) * float64(_SC_CLK_TCK)
+		}
+		ch <- prometheus.MustNewConstMetric(
+			c.serviceMetrics[SM_PROCESS_UPTIME_SECONDS],
+			prometheus.GaugeValue,
+			float64(serviceUptimeSeconds),
 			svc.name,
 		)
 	}
@@ -367,6 +408,22 @@ func main() {
 
 	elog = log.New(os.Stderr, "", log.LstdFlags)
 	elog.Printf("service exporter starting up")
+
+	cmd := exec.Command("getconf", "CLK_TCK")
+	sysconfOutput, err := cmd.CombinedOutput()
+	if err != nil {
+		errStr := err.Error()
+		if sysconfOutput != nil {
+			log.Printf("command 'getconf CLK_TCK' failed: %s", err)
+			errStr = (strings.SplitN(string(sysconfOutput), "\n", 2))[0]
+		}
+		elog.Printf("could not query CLK_TCK from getconf: %s", errStr)
+		os.Exit(1)
+	}
+	_SC_CLK_TCK, err = strconv.Atoi(strings.TrimSpace(string(sysconfOutput)))
+	if err != nil {
+		elog.Fatalf("could not query CLK_TCK from getconf: %s", err)
+	}
 
 	collector := newSvcCollector(serviceNames)
 
