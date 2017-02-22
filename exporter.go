@@ -142,15 +142,21 @@ func (svc *service) askServiceForPID() (pid int, err error) {
 		log.Printf("could not query for the status of service %s: %s", svc.name, errStr)
 		os.Exit(1)
 	}
-	parts := strings.Split(string(output), " ")
-	if len(parts) < 4 {
+	commaSeparated := strings.Split(string(output), ",")
+	parts := strings.Split(commaSeparated[0], " ")
+	if len(parts) < 2 {
 		log.Printf("unexpected service status %s", string(output))
 		log.Fatalf("could not query for the status of service %s", svc.name)
 	}
-	status := parts[len(parts) - 3]
-	if status != "start/running," {
+	status := parts[len(parts) - 1]
+	if status != "start/running" {
 		return 0, errServiceNotRunning
 	}
+	if len(commaSeparated) != 2 {
+		log.Printf("unexpected service status %s", string(output))
+		log.Fatalf("could not query for the status of service %s", svc.name)
+	}
+	parts = strings.Split(commaSeparated[1], " ")
 	pidStr := strings.TrimSpace(parts[len(parts) - 1])
 	pid, err = strconv.Atoi(pidStr)
 	if err != nil {
