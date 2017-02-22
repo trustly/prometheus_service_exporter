@@ -13,8 +13,8 @@ How to build
 ------------
 
 Having installed a reasonably modern version of Go, run: `go get
-github.com/trustly/postgres_exporter`.  This should produce a binary under
-`$GOPATH/bin`.
+github.com/trustly/prometheus_service_exporter`.  This should produce a binary
+under `$GOPATH/bin`.
 
 Configuration
 -------------
