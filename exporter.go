@@ -369,7 +369,7 @@ func (c *SvcCollector) Collect(ch chan<- prometheus.Metric) {
 		if svc.pid == -1 {
 			serviceUptimeSeconds = -1
 		} else {
-			serviceUptimeSeconds = float64(systemUptimeInTicks - svc.procStatStartTime) * float64(_SC_CLK_TCK)
+			serviceUptimeSeconds = float64(systemUptimeInTicks - svc.procStatStartTime) / float64(_SC_CLK_TCK)
 		}
 		ch <- prometheus.MustNewConstMetric(
 			c.serviceMetrics[SM_PROCESS_UPTIME_SECONDS],
